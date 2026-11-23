@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self' https://api.groq.com https://api.openai.com https://openrouter.ai http://localhost:* http://127.0.0.1:*; base-uri 'none'; form-action 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="dark light">
+<title>Private LLM Playground</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2314b8a6'/%3E%3Cpath d='M16 7l7 3v6c0 4.5-3 7.5-7 9-4-1.500-7-4.500-7-9v-6z' fill='none' stroke='white' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">
+    <span class="logo" aria-hidden="true">&#128737;</span>
+    <div>
+      <h1>Private LLM Playground</h1>
+      <p class="sub">Talk to a model straight from your browser. No backend, no accounts, no analytics.</p>
+    </div>
+  </div>
+  <div class="top-actions">
+    <label class="langpick" for="uiLang"><span id="langLbl">Language</span></label>
+    <select id="uiLang" aria-label="Language"></select>
+    <span class="badge live" id="badge">LIVE &middot; real API calls</span>
+    <button class="btn ghost" id="wipeAll" type="button" title="Ctrl+Shift+Backspace">Wipe everything</button>
+  </div>
+</header>
+
+<main class="layout">
+  <!-- SETTINGS -->
+  <aside class="panel settings" aria-label="Settings">
+    <section>
+      <h2>Provider</h2>
+      <label for="provider">Where to send requests</label>
+      <select id="provider"></select>
+      <p class="hint" id="providerHint"></p>
+      <label for="baseUrl">Base URL</label>
+      <input id="baseUrl" type="text" spellcheck="false" autocomplete="off">
+
+      <label for="apiKey">API key</label>
+      <div class="row">
+        <input id="apiKey" type="password" spellcheck="false" autocomplete="off" placeholder="paste key here">
+        <button class="btn small" id="toggleKey" type="button">Show</button>
+      </div>
+      <fieldset class="radios">
+        <legend>Where may the key live?</legend>
+        <label><input type="radio" name="keymode" value="memory" checked> Memory only <em>(gone on refresh)</em></label>
+        <label><input type="radio" name="keymode" value="session"> This tab <em>(sessionStorage)</em></label>
+        <label><input type="radio" name="keymode" value="encrypted"> Encrypted on this device <em>(passphrase)</em></label>
+      </fieldset>
+      <div class="row">
+        <button class="btn small" id="unlockKey" type="button">Unlock saved key</button>
+        <button class="btn small" id="forgetKey" type="button">Forget key</button>
+      </div>
+      <p class="hint" id="keyStatus" role="status"></p>
+    </section>
+
+    <section>
+      <h2>Model</h2>
+      <label for="model">Model name</label>
+      <div class="row">
+        <input id="model" type="text" list="modelList" spellcheck="false" autocomplete="off">
+        <button class="btn small" id="loadModels" type="button">Load list</button>
+      </div>
+      <datalist id="modelList"></datalist>
+
+      <label for="system">System prompt <em>(never saved)</em></label>
+      <textarea id="system" rows="3" placeholder="e.g. You are a patient tutor who explains with examples."></textarea>
+    </section>
+
+    <section>
+      <h2>Parameters</h2>
+      <label for="temperature">Temperature <output id="temperatureOut">0.7</output></label>
+      <input id="temperature" type="range" min="0" max="2" step="0.05" value="0.7">
+      <label for="topP">Top-p <output id="topPOut">1</output></label>
+      <input id="topP" type="range" min="0" max="1" step="0.05" value="1">
+      <div class="two">
+        <div>
+          <label for="maxTokens">Max tokens</label>
+          <input id="maxTokens" type="number" min="1" max="131072" value="1024">
+        </div>
+        <div>
+          <label for="seed">Seed <em>(optional)</em></label>
+          <input id="seed" type="number" placeholder="random">
+        </div>
+      </div>
+      <label for="stop">Stop sequences <em>(comma-separated, max 4)</em></label>
+      <input id="stop" type="text" spellcheck="false" autocomplete="off">
+      <label for="reasoning">Reasoning effort</label>
+      <select id="reasoning">
+        <option value="">Model default (not sent)</option>
+        <option value="low">Low</option>
+        <option value="medium">Medium</option>
+        <option value="high">High</option>
+      </select>
+      <p class="hint">Only reasoning models accept this. Thinking tokens count toward max tokens.</p>
+    </section>
+
+    <section>
+      <h2>Language &amp; voice</h2>
+      <label for="voiceLang">Voice input language</label>
+      <select id="voiceLang">
+        <option value="auto">Same as interface language</option>
+        <option value="en-IN">English (India)</option>
+        <option value="en-US">English (US)</option>
+        <option value="hi-IN">हिन्दी</option>
+        <option value="mr-IN">मराठी</option>
+        <option value="zh-CN">中文（简体）</option>
+      </select>
+      <label class="check"><input type="checkbox" id="replyLang" checked> <span id="replyLangLbl">Make the model reply in the chosen language</span></label>
+      <label class="check"><input type="checkbox" id="allowCloudVoice"> <span id="allowCloudLbl">Allow cloud speech if on-device isn't available</span></label>
+      <p class="hint">Voice input and read-aloud use on-device speech when your browser supports it. In most browsers, online speech sends your audio to the browser maker, so it stays off unless you tick the box.</p>
+    </section>
+
+    <section>
+      <h2>Privacy controls</h2>
+      <label class="check"><input type="checkbox" id="redact" checked> <span id="redactLbl">Redact personal data before sending</span></label>
+      <p class="hint">Emails, phone numbers, Aadhaar, PAN, card numbers, IPs and API keys are swapped for placeholders like <code>[EMAIL_1]</code>. The model never sees the real value; the originals are put back in your view only.</p>
+      <label for="idle">Auto-wipe after inactivity</label>
+      <select id="idle">
+        <option value="0">Never</option>
+        <option value="5">5 minutes</option>
+        <option value="15" selected>15 minutes</option>
+        <option value="30">30 minutes</option>
+      </select>
+    </section>
+  </aside>
+
+  <!-- CHAT + RESULTS -->
+  <section class="stage">
+    <div class="panel chat">
+      <div class="chat-head">
+        <h2 id="chatHead">Conversation</h2>
+        <div class="row">
+          <button class="btn small" id="undo" type="button">Undo last turn</button>
+          <button class="btn small" id="reset" type="button">Reset</button>
+          <button class="btn small" id="export" type="button">Export</button>
+        </div>
+      </div>
+      <div id="log" class="log" aria-live="polite">
+        <div class="empty" id="empty">
+          <p><strong>Nothing is stored.</strong> Your messages live in this tab's memory and disappear when you close it.</p>
+          <p>Pick a provider, add a key (or choose Ollama / LM Studio to stay 100% on your own machine), and say hello.</p>
+        </div>
+      </div>
+      <div class="composer">
+        <textarea id="prompt" rows="3" placeholder="Write a prompt…  (Ctrl/Cmd + Enter to send, Esc to stop)"></textarea>
+        <div class="composer-foot">
+          <span class="hint"><span id="promptInfo"></span> <span id="voiceStatus" role="status"></span></span>
+          <div class="row">
+            <button class="btn" id="mic" type="button" aria-pressed="false">🎤 Speak</button>
+            <button class="btn danger" id="stop-btn" type="button" hidden>Stop</button>
+            <button class="btn primary" id="send" type="button">Send</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid3">
+      <div class="panel card">
+        <h2>Prompt analysis</h2>
+        <div class="big" id="shotLabel">ZERO-SHOT</div>
+        <p class="hint" id="shotNote">No examples in context.</p>
+      </div>
+      <div class="panel card">
+        <h2>Speed</h2>
+        <dl class="kv">
+          <dt>First answer token</dt><dd id="mTtft">–</dd>
+          <dt>Total time</dt><dd id="mTotal">–</dd>
+          <dt>Tokens / second</dt><dd id="mTps">–</dd>
+        </dl>
+      </div>
+      <div class="panel card">
+        <h2>Token usage</h2>
+        <dl class="kv">
+          <dt>Input</dt><dd id="uIn">–</dd>
+          <dt>Reasoning</dt><dd id="uReason">–</dd>
+          <dt>Output</dt><dd id="uOut">–</dd>
+          <dt>Total</dt><dd id="uTotal">–</dd>
+          <dt>Left this minute</dt><dd id="uLeft">–</dd>
+        </dl>
+      </div>
+    </div>
+    <p class="hint note">Every turn re-sends the whole conversation, so input tokens grow each time. The API remembers nothing between requests.</p>
+
+    <div class="panel">
+      <h2 id="netHead">Network transparency</h2>
+      <p class="hint">Every request this page makes is listed here with the exact JSON that left your browser. Your API key goes only in the <code>Authorization</code> header and is never shown.</p>
+      <div id="netlog" class="netlog"><p class="hint">No requests yet.</p></div>
+    </div>
+
+    <div class="panel">
+      <div class="chat-head">
+        <h2 id="codeHead">Code for this request</h2>
+        <div class="tabs" role="tablist">
+          <button class="tab active" data-lang="curl" type="button" role="tab">curl</button>
+          <button class="tab" data-lang="python" type="button" role="tab">Python</button>
+          <button class="tab" data-lang="js" type="button" role="tab">JavaScript</button>
+        </div>
+      </div>
+      <div class="code"><div class="code-h"><span id="codeLang">curl</span><button class="copy" id="copyCode" type="button">Copy</button></div><pre><code id="codeOut"></code></pre></div>
+      <p class="hint">The key is read from an environment variable, never printed.</p>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <details>
+    <summary>What this page does and doesn't do with your data</summary>
+    <ul>
+      <li>No server of mine sits in the middle. Requests go from your browser directly to the provider you pick.</li>
+      <li>No analytics, cookies, fonts or scripts from other sites. The browser enforces this with a Content-Security-Policy.</li>
+      <li>Chats are kept in memory only. Closing the tab erases them. Export is manual.</li>
+      <li>Your key stays in memory unless you choose otherwise; the encrypted option uses AES-GCM with a key derived from your passphrase (PBKDF2, 310,000 rounds).</li>
+      <li>The provider you choose still receives what you send, under its own privacy policy. For zero third-party exposure, use Ollama or LM Studio on your own computer.</li>
+    </ul>
+  </details>
+</footer>
+
+<dialog id="passDlg">
+  <div class="dlg">
+    <h3 id="passTitle">Passphrase</h3>
+    <p class="hint" id="passMsg"></p>
+    <input id="passInput" type="password" autocomplete="off" spellcheck="false">
+    <div class="row end">
+      <button class="btn" id="passCancel" type="button">Cancel</button>
+      <button class="btn primary" id="passOk" type="button">OK</button>
+    </div>
+  </div>
+</dialog>
+
+<script src="i18n.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
